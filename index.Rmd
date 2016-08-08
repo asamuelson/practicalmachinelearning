@@ -1,0 +1,93 @@
+---
+title: "PML_Course_Project"
+author: "asamuelson"
+date: "August 7, 2016"
+output: html_document
+---
+
+This report details an effort to predict the quality of exercise performed by 
+study participants by using a machine learning algorithm. The data comes from
+the study cited below.
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative 
+Activity Recognition of Weight Lifting Exercises. Proceedings of 4th 
+International Conference in Cooperation with SIGCHI (Augmented Human '13). 
+Stuttgart, Germany: ACM SIGCHI, 2013.
+
+The training data and test cases from the CSV files were imported into R
+using read.csv and split into training and testing sets for purposes of model 
+validation and out of sample error estimation. The training set contained 70% of 
+the original data and the testing set contained the other 30%.
+
+```{r, echo=TRUE, cache=TRUE}
+library(caret)
+training <- read.csv("pml-training.csv")
+classes <- sapply(training, class)
+testing <- read.csv("pml-testing.csv", colClasses = c("character", classes[2:159]))
+inTrain <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+trainingSet <- training[inTrain, ]
+testingSet <- training[-inTrain, ]
+```
+
+The first seven columns of the dataset did not contain measurement information on 
+the exercises performed in the study and were therefore omitted as predictors in 
+the model. The function nearZeroVar was used to determine variables which had 
+little variance. These variables were then omitted as predictors in an effort to 
+streamline the model since their lack of variance seems to imply that they do 
+not contribute significant predictive power.
+
+The model was built using the train function in the caret package in R. The train 
+function allows calls to a variety of different machine learning algorithms. For 
+this model,after some experimentation with different methods, the random forest 
+method was selected for its high accuracy. This model uses a random forest with 
+500 trees and k nearest neighbor imputation preprocessing to handle the missing 
+values in the dataset. The random forest fit the model using the 93 predictors 
+which remained after the seemingly irrelevant and near zero variance variables 
+were removed. The preprocessing was necessary for the random forest to be able 
+to handle the dataset, as there were many missing values.
+
+```{r, echo=TRUE, cache=TRUE}
+nearzerovars <- nearZeroVar(training)
+x <- trainingSet[ ,-c(1:7, nearzerovars, 160)]
+y <- trainingSet[ ,160]
+ctrl <- trainControl(method = "repeatedcv")
+modFit <- train(x = x, y = y,  method = "rf", preProcess = "knnImpute", trControl = ctrl)
+```
+
+See below for the information on the final model, including the number of trees, 
+the number of variables evaluated at each split, the OOB error rate estimate, 
+and the confusion matrix. The final model uses 47 randomly selected predictors and 
+achieved accuracy of 99.10% on the training set. The model uses the repeatedcv
+method to perform cross-validation. The estimated OOB error rate was 0.84% and 
+the accuracy on the test set was 99.28%. The model predicted the results of 
+all 20 unknown test cases correctly. 
+
+Figure 1 shows the accuracy of the model based on the number of predictors 
+evaluated at each step, with an optimal value of 47. Figure 2 shows the model 
+error based on the number of trees. It seems that the model accuracy is only 
+marginally improved by adding more trees once 50 or so trees are in the model. 
+
+```{r, echo=TRUE}
+print(modFit$finalModel)
+plot(modFit, main = "Figure 1: Model Accuracy by Number of Predictors")
+plot(modFit$finalModel, main = "Figure 2: Error by Number of Trees")
+``` 
+
+The following table shows the accuracy of the predicted values for the test set
+derived from the original training data. The test set was restricted to the same 
+predictors as the training set. 
+
+```{r, echo=TRUE}
+w <- testingSet[ ,-c(1:7, nearzerovars, 160)]
+z <- testingSet[ ,160] 
+pred <- predict(modFit, w)
+table(pred, z)
+``` 
+    
+Below the predictions for the 20 unknown test cases are shown. All 20 predicted 
+values were verified as correct on the prediction quiz.
+
+```{r, echo=TRUE}
+testSet <- testing[ ,-c(1:7, nearzerovars, 160)]
+predict(modFit, testSet)
+``` 
